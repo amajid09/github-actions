@@ -1,0 +1,48 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci && npm test
+
+  build:
+    needs: test
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      node-version: "20"
+      environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  deploy-staging:
+    needs: build
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      environment: staging
+      artifact-name: ${{ needs.build.outputs.artifact-name }}
+      dry-run: false
+    secrets:
+      DEPLOY_TOKEN: ${{ secrets.STAGING_DEPLOY_TOKEN }}
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+  deploy-production:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      environment: production
+      artifact-name: ${{ needs.build.outputs.artifact-name }}
+      dry-run: false
+    secrets: inherit

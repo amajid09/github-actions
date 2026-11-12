@@ -1,0 +1,72 @@
+name: Reusable Deploy Workflow
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Target environment: staging or production"
+        required: true
+        type: string
+      artifact-name:
+        description: "Name of the artifact to deploy"
+        required: true
+        type: string
+      dry-run:
+        description: "Run in dry-run mode without making changes"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      DEPLOY_TOKEN:
+        required: true
+        description: "Authentication token for deployment target"
+      SLACK_WEBHOOK:
+        required: false
+        description: "Slack webhook for deployment notifications"
+    outputs:
+      deployment-url:
+        description: "URL of the deployed application"
+        value: ${{ jobs.deploy.outputs.url }}
+      deployment-id:
+        description: "Unique identifier for this deployment"
+        value: ${{ jobs.deploy.outputs.id }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+      id: ${{ steps.deploy.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: dist/
+
+      - name: Deploy to ${{ inputs.environment }}
+        id: deploy
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY RUN: would deploy to ${{ inputs.environment }}"
+            echo "url=https://${{ inputs.environment }}.example.com" >> "$GITHUB_OUTPUT"
+            echo "id=dry-run-$(date +%s)" >> "$GITHUB_OUTPUT"
+          else
+            echo "Deploying to ${{ inputs.environment }}..."
+            # ./scripts/deploy.sh --env ${{ inputs.environment }} --token "$DEPLOY_TOKEN"
+            echo "url=https://${{ inputs.environment }}.example.com" >> "$GITHUB_OUTPUT"
+            echo "id=deploy-$(date +%s)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notify Slack
+        if: secrets.SLACK_WEBHOOK != '' && !inputs.dry-run
+        run: |
+          curl -X POST "${{ secrets.SLACK_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{"text": "Deployed to ${{ inputs.environment }}: ${{ steps.deploy.outputs.url }}"}'

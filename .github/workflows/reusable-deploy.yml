@@ -35,6 +35,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    env:
+      HAS_SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK != '' }}
     outputs:
       url: ${{ steps.deploy.outputs.url }}
       id: ${{ steps.deploy.outputs.id }}
@@ -65,8 +67,10 @@ jobs:
           fi
 
       - name: Notify Slack
-        if: secrets.SLACK_WEBHOOK != '' && !inputs.dry-run
+        if: ${{ !inputs.dry-run && env.HAS_SLACK_WEBHOOK == 'true' }}
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
         run: |
-          curl -X POST "${{ secrets.SLACK_WEBHOOK }}" \
+          curl -X POST "$SLACK_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{"text": "Deployed to ${{ inputs.environment }}: ${{ steps.deploy.outputs.url }}"}'

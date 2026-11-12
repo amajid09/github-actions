@@ -1,0 +1,36 @@
+name: Reusable Build Workflow
+
+on:
+    workflow_call:
+        inputs:
+            node-version:
+                description: "Node.js version to use"
+                required: false
+                type: string
+                default: "20"
+            environment: 
+                description: "Target environment"
+                required: true
+                type: string
+
+            
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        outputs: 
+            artifact-name: ${{steps.upload.outputs.artifact-id}}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                node-version: ${{inputs.node-version}}
+            - run: npm ci
+              env: 
+                NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}} 
+            - run: npm run build
+            - id: upload
+              uses: actions/upload@v4
+              with: 
+                name: build-${{inputs.environment}}-${{github.sha}}
+                path: dist/
